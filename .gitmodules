@@ -2,3 +2,6 @@
 	path = third_party/mujoco_menagerie
 	url = https://github.com/deepmind/mujoco_menagerie.git
 	branch = main
+[submodule "robopianist-rl"]
+	path = robopianist-rl
+	url = https://github.com/kevinzakka/robopianist-rl.git
