@@ -1,0 +1,116 @@
+# MIDI Alignment Evaluation
+
+## 概述
+
+`evaluate_alignment.py` 使用动态时间规整（DTW）算法评估机器人MIDI演奏表现，通过与参考MIDI文件对齐来计算评分。可选地使用音频相似度（余弦相似度）辅助评分。
+
+## 使用方法
+
+### 基本用法
+
+```bash
+# 仅使用DTW对齐评分
+python evaluate_alignment.py <performed_midi_path>
+
+# 启用音频相似度评分
+python evaluate_alignment.py <performed_midi_path> --use-audio
+
+# 使用视频文件音频
+python evaluate_alignment.py <performed_midi_path> --video <video.mp4> --use-audio
+```
+
+### 示例
+
+```bash
+# 评估机器人演奏文件
+python evaluate_alignment.py robot_performance.mid
+
+# 评估特定文件
+python evaluate_alignment.py outputs/rl/run_name/recording_001.mid
+
+# 使用音频相似度辅助评分
+python evaluate_alignment.py robot_performance.mid --use-audio
+
+# 结合视频音频和MIDI音频进行评分
+python evaluate_alignment.py robot_performance.mid --video outputs/video.mp4 --use-audio
+
+# 调整音频相似度权重（默认0.2）
+python evaluate_alignment.py robot_performance.mid --use-audio --audio-weight 0.3
+
+# 指定自定义参考MIDI文件
+python evaluate_alignment.py robot_performance.mid --reference-midi custom_reference.mid
+```
+
+## 评分机制
+
+评分范围：0.0（最差）到 1.0（最好）
+
+### 评分指标
+
+#### DTW对齐评分（基础评分）
+
+1. **音高匹配** (权重 100)：严重惩罚音高错误
+2. **时间精度** (权重 1)：开始时间差异
+3. **时长匹配** (权重 1)：音符时长差异
+4. **完整性**：缺失音符惩罚 500/个，多余音符惩罚 200/个
+
+#### 音频相似度评分（可选）
+
+启用 `--use-audio` 后，计算：
+- 从视频提取音频波形（使用 `librosa`）
+- 从MIDI合成音频（优先使用 `robopianist.music`，回退到 `pretty_midi`）
+- 计算MFCC特征（13维）
+- 使用余弦相似度比较两个音频
+- 最终评分：`(1 - audio_weight) * DTW_score + audio_weight * audio_similarity`
+
+默认 `audio_weight = 0.2`（即20%权重给音频相似度）
+
+### 评分等级
+
+- **Excellent** (>0.8): 优秀演奏
+- **Good** (0.6-0.8): 良好演奏
+- **Fair** (0.4-0.6): 一般演奏
+- **Poor** (<0.4): 需要改进
+
+## 技术细节
+
+### DTW对齐
+
+使用 `librosa.sequence.dtw` 进行对齐，支持以下步长：
+- `(1, 1)`: 同时前进
+- `(0, 1)`: 只前进参考序列
+- `(1, 0)`: 只前进演奏序列
+
+### 特征表示
+
+每个音符由3个特征表示：
+- 开始时间 (start)
+- 音高 (pitch)
+- 时长 (duration)
+
+### 音频相似度
+
+音频相似度使用MFCC（Mel频率倒谱系数）特征：
+- **采样率**: 44100 Hz
+- **MFCC维度**: 13维
+- **Hop length**: 512 samples
+- 对时间维度取平均，得到固定长度的特征向量
+- 使用余弦相似度度量
+
+### 依赖库
+
+- `pretty_midi`: MIDI文件处理
+- `librosa`: 音频处理和DTW对齐
+- `numpy`: 数值计算
+- `scipy`: 距离计算
+- `robopianist.music` (可选): 高质量MIDI合成
+
+## 注意事项
+
+- 脚本只评估第一个乐器的音符
+- MIDI文件必须有至少一个乐器和音符
+- 完美匹配会得到 1.0 分
+- 没有音符的演奏会得到 0.0 分
+- 音频相似度需要有效的音频文件或MIDI合成功能
+- 如果音频提取/合成失败，脚本会回退到纯DTW评分
+
