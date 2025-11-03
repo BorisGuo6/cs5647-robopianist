@@ -2,43 +2,36 @@
 
 ## 概述
 
-`evaluate_alignment.py` 使用动态时间规整（DTW）算法评估机器人MIDI演奏表现，通过与参考MIDI文件对齐来计算评分。可选地使用音频相似度（余弦相似度）辅助评分。
+`evaluate_alignment.py` 通过比较**视频音频**和**参考MIDI文件**评估机器人演奏表现。结合动态时间规整（DTW）和音频相似度（余弦相似度）两种方法计算综合评分。
+
+**核心思路**：将视频中的机器人演奏音频与预期演奏（参考MIDI合成音频）进行对齐和比较。
 
 ## 使用方法
 
 ### 基本用法
 
 ```bash
-# 仅使用DTW对齐评分
-python evaluate_alignment.py <performed_midi_path>
+# 标准评估（默认启用音频相似度）
+python evaluate_alignment.py <video_path> <performed_midi_path>
 
-# 启用音频相似度评分
-python evaluate_alignment.py <performed_midi_path> --use-audio
-
-# 使用视频文件音频
-python evaluate_alignment.py <performed_midi_path> --video <video.mp4> --use-audio
+# 仅使用DTW对齐评分（禁用音频相似度）
+python evaluate_alignment.py <video_path> <performed_midi_path> --no-audio
 ```
 
 ### 示例
 
 ```bash
-# 评估机器人演奏文件
-python evaluate_alignment.py robot_performance.mid
-
-# 评估特定文件
-python evaluate_alignment.py outputs/rl/run_name/recording_001.mid
-
-# 使用音频相似度辅助评分
-python evaluate_alignment.py robot_performance.mid --use-audio
-
-# 结合视频音频和MIDI音频进行评分
-python evaluate_alignment.py robot_performance.mid --video outputs/video.mp4 --use-audio
-
-# 调整音频相似度权重（默认0.2）
-python evaluate_alignment.py robot_performance.mid --use-audio --audio-weight 0.3
+# 评估机器人演奏（视频+MIDI）
+python evaluate_alignment.py 00002.mp4 twinkle-twinkle-trimmed.mid
 
 # 指定自定义参考MIDI文件
-python evaluate_alignment.py robot_performance.mid --reference-midi custom_reference.mid
+python evaluate_alignment.py 00002.mp4 twinkle-twinkle-trimmed.mid --reference-midi custom_reference.mid
+
+# 调整音频相似度权重（默认0.2）
+python evaluate_alignment.py 00002.mp4 twinkle-twinkle-trimmed.mid --audio-weight 0.3
+
+# 仅使用DTW对齐评分
+python evaluate_alignment.py 00002.mp4 twinkle-twinkle-trimmed.mid --no-audio
 ```
 
 ## 评分机制
@@ -90,12 +83,24 @@ python evaluate_alignment.py robot_performance.mid --reference-midi custom_refer
 
 ### 音频相似度
 
-音频相似度使用MFCC（Mel频率倒谱系数）特征：
+音频相似度使用MFCC（Mel频率倒谱系数）特征比较视频音频和参考MIDI合成音频：
+- **视频音频提取**: 使用 `librosa` 从视频中提取单声道音频
+- **MIDI音频合成**: 使用 `robopianist.music` 或 `pretty_midi.fluidsynth` 合成参考音频
 - **采样率**: 44100 Hz
 - **MFCC维度**: 13维
 - **Hop length**: 512 samples
 - 对时间维度取平均，得到固定长度的特征向量
-- 使用余弦相似度度量
+- 使用余弦相似度度量两个音频的特征相似性
+
+### 评分流程
+
+1. **输入**: 视频文件（MP4等）+ 演奏MIDI文件 + 参考MIDI文件
+2. **提取特征**: 
+   - 从视频中提取音频波形
+   - 从MIDI文件中提取音符特征和合成音频
+3. **对齐**: 使用DTW对齐演奏MIDI和参考MIDI的音符序列
+4. **比较**: 计算DTW对齐评分和音频相似度评分
+5. **综合**: 加权组合两种评分得到最终分数
 
 ### 依赖库
 
@@ -107,10 +112,11 @@ python evaluate_alignment.py robot_performance.mid --reference-midi custom_refer
 
 ## 注意事项
 
+- **必需输入**: 视频文件、演奏MIDI文件、参考MIDI文件
 - 脚本只评估第一个乐器的音符
 - MIDI文件必须有至少一个乐器和音符
 - 完美匹配会得到 1.0 分
 - 没有音符的演奏会得到 0.0 分
-- 音频相似度需要有效的音频文件或MIDI合成功能
 - 如果音频提取/合成失败，脚本会回退到纯DTW评分
+- 视频必须包含有效的音频轨道
 

@@ -259,23 +259,26 @@ def calculate_alignment_score(
             if video_path is not None:
                 # Extract audio from video
                 video_audio = extract_audio_from_video(video_path)
-            else:
-                # Synthesize from performed MIDI as fallback
-                video_audio = synthesize_midi_audio(performed_midi_path)
-            
-            if video_audio is not None:
-                # Synthesize reference MIDI audio
-                ref_audio = synthesize_midi_audio(reference_midi_path)
                 
-                if ref_audio is not None:
-                    # Compute audio similarity score
-                    audio_score = compute_audio_similarity(ref_audio, video_audio)
+                if video_audio is not None:
+                    # Synthesize reference MIDI audio
+                    ref_audio = synthesize_midi_audio(reference_midi_path)
                     
-                    # Combine alignment score and audio similarity
-                    # audio_weight: how much to weight audio similarity (default 0.2 = 20%)
-                    reward = (1.0 - audio_weight) * reward + audio_weight * audio_score
-                    
-                    print(f"Audio similarity: {audio_score:.4f}")
+                    if ref_audio is not None:
+                        # Compute audio similarity score
+                        audio_score = compute_audio_similarity(ref_audio, video_audio)
+                        
+                        # Combine alignment score and audio similarity
+                        # audio_weight: how much to weight audio similarity (default 0.2 = 20%)
+                        reward = (1.0 - audio_weight) * reward + audio_weight * audio_score
+                        
+                        print(f"Audio similarity: {audio_score:.4f}")
+                    else:
+                        print("Warning: Could not synthesize reference MIDI audio")
+                else:
+                    print("Warning: Could not extract audio from video")
+            else:
+                print("Warning: Video path not provided, skipping audio similarity")
         except Exception as e:
             print(f"Warning: Audio similarity calculation failed: {e}")
             # Continue with alignment score only
@@ -284,13 +287,15 @@ def calculate_alignment_score(
 
 
 if __name__ == "__main__":
+    import sys
     import argparse
     from pathlib import Path
     
     parser = argparse.ArgumentParser(
-        description="Evaluate MIDI performance alignment with optional audio similarity"
+        description="Evaluate robot performance by comparing video audio with reference MIDI"
     )
-    parser.add_argument("performed_midi_path", type=str, help="Path to performed MIDI file")
+    parser.add_argument("video_path", type=str, help="Path to video file with audio track (e.g., MP4)")
+    parser.add_argument("performed_midi_path", type=str, help="Path to performed MIDI file from the video")
     parser.add_argument(
         "--reference-midi",
         type=str,
@@ -298,21 +303,15 @@ if __name__ == "__main__":
         help="Path to reference MIDI file (default: twinkle-twinkle-trimmed.mid)"
     )
     parser.add_argument(
-        "--video",
-        type=str,
-        default=None,
-        help="Path to video file with audio track (e.g., MP4)"
-    )
-    parser.add_argument(
-        "--use-audio",
-        action="store_true",
-        help="Enable audio similarity scoring"
-    )
-    parser.add_argument(
         "--audio-weight",
         type=float,
         default=0.2,
         help="Weight for audio similarity (0.0-1.0, default 0.2)"
+    )
+    parser.add_argument(
+        "--no-audio",
+        action="store_true",
+        help="Disable audio similarity scoring (use only DTW alignment)"
     )
     
     args = parser.parse_args()
@@ -326,10 +325,13 @@ if __name__ == "__main__":
     else:
         ref_file = script_dir / 'twinkle-twinkle-trimmed.mid'
     
+    video_file = Path(args.video_path)
     perf_file = Path(args.performed_midi_path)
     
     print("=== MIDI Alignment Evaluation ===\n")
     print(f"Reference MIDI: {ref_file.name}")
+    print(f"Performed MIDI: {perf_file.name}")
+    print(f"Video: {video_file.name}")
     
     # Check if files exist
     if not ref_file.exists():
@@ -340,14 +342,20 @@ if __name__ == "__main__":
         print(f"Error: Performed MIDI not found: {perf_file}")
         sys.exit(1)
     
+    if not video_file.exists():
+        print(f"Error: Video file not found: {video_file}")
+        sys.exit(1)
+    
+    # Evaluate with audio similarity by default (unless --no-audio is specified)
+    use_audio = not args.no_audio
+    
     # Try to evaluate
     try:
-        video_path = args.video if args.video else None
         score = calculate_alignment_score(
             str(ref_file),
             str(perf_file),
-            video_path=video_path,
-            use_audio_similarity=args.use_audio,
+            video_path=str(video_file),
+            use_audio_similarity=use_audio,
             audio_weight=args.audio_weight
         )
         print(f"\nAlignment Score: {score:.4f}")
