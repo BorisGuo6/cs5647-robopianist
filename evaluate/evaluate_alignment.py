@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """MIDI Alignment Evaluation Script
 
 This script evaluates robot MIDI performance by aligning it with a reference MIDI file
